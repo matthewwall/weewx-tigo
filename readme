@@ -4,6 +4,11 @@ Distributed under terms of the GPLv3
 
 This is a driver for weewx that captures data from TIGO solar panel monitors.
 
+Note that there will be no output from the TIGO when there is no sunlight on
+the panels.  You might be confused when you try to install/configure the driver
+at night, but it is only because the panels only output data when they are
+illuminated.
+
 
 ===============================================================================
 Installation
@@ -13,7 +18,7 @@ Installation
   a) install weewx
       http://weewx.com/docs
   b) install taptap and verify functionality
-      git clone https://github.com/willglynn/taptap
+      https://github.com/willglynn/taptap
 
 1) install the driver
 
@@ -32,6 +37,48 @@ weectl station reconfigure --driver=user.tigo
 4) start weewx
 
 sudo systemctl start weewx
+
+
+===============================================================================
+panel support
+
+The driver supports up to 50 solar panels.  If you have more than 50 panels
+connected to the TIGO, modify MAX_PANELS in tigo.py before the database is
+created (which happens the first time you run weewx with the tigo schema).
+
+
+===============================================================================
+panel map
+
+Each solar panel is identified by a combination of gateway and node IDs.  These
+must be mapped to the generic field names of p1, p2, p3, ... in the database.
+The panel_map section of the configuration file defines this mapping.
+
+To find the identifiers, run the driver directly with the list-identifiers
+action:
+
+  tigo.py --action list-identifiers
+
+Using the resulting list, create the panel_map section in the TIGO section of
+the weewx configuration file.
+
+For example,
+
+$ PYTHONPATH=$WEEWX_BINDIR python3 $WEEWX_USRDIR/tigo.py --action list-identifiers
+listening for 30 seconds
+found 3 unique identifiers
+  4609.10
+  4609.11
+  4609.12
+
+This becomes:
+
+[TIGO]
+  driver = user.tigo
+  [[panel_map]]
+    p1 = 4609.10
+    p2 = 4609.11
+    p3 = 4609.12
 
 
 ===============================================================================
@@ -61,19 +108,20 @@ The taptap application needs libudev:
 
   sudo apt install libudev-dev
 
-Then you can build taptap:
+Then you can build and install taptap something like this:
 
   git clone https://github.com/willglynn/taptap
   cd taptap
   cargo build
+  cargo install --path . --root /opt/taptap
 
 Now you can verify that taptap works:
 
-  ./target/debug/taptap list-serial-ports
+  /opt/taptap/bin/taptap list-serial-ports
 
 Collect data by specifying the serial port listed in the previous command:
 
-  ./target/debug/taptap observe --serial /dev/ttyUSB0
+  /opt/taptap/bin/taptap observe --serial /dev/ttyUSB0
 
 This should result in JSON-formatted data:
 

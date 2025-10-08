@@ -3,8 +3,6 @@
 # Distributed under the terms of the GNU Public License (GPLv3)
 """
 Collect data from TIGO solar panel monitor over RS485 using taptap.
-
-./target/debug/taptap observe --serial /dev/ttyUSB0
 """
 
 from __future__ import with_statement
@@ -82,12 +80,12 @@ MAX_PANELS = 50
 schema = [('dateTime', 'INTEGER NOT NULL UNIQUE PRIMARY KEY'),
           ('usUnits', 'INTEGER NOT NULL'),
           ('interval', 'INTEGER NOT NULL')] + \
-[('ch%s_voltage_in' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
-[('ch%s_voltage_out' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
-[('ch%s_current' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
-[('ch%s_dc_dc_duty_cycle' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
-[('ch%s_temperature' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
-[('ch%s_rssi' % (i + 1), 'REAL') for i in range(MAX_PANELS)]
+[('p%s_voltage_in' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
+[('p%s_voltage_out' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
+[('p%s_current' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
+[('p%s_dc_dc_duty_cycle' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
+[('p%s_temperature' % (i + 1), 'REAL') for i in range(MAX_PANELS)] + \
+[('p%s_rssi' % (i + 1), 'REAL') for i in range(MAX_PANELS)]
 
 weewx.units.obs_group_dict['voltage_in'] = 'group_volt'
 weewx.units.obs_group_dict['voltage_out'] = 'group_volt'
@@ -216,6 +214,12 @@ class TIGOConfigurationEditor(weewx.drivers.AbstractConfEditor):
     driver = user.tigo
     # The name of the tap device, e.g., /dev/ttyUSB0 or hostname.lan:7160
     tap = REPLACE_ME
+
+    [[panel_map]]
+        # This section maps the broker_id.node_id pairs to the panel indices
+        # that form the database field names.
+        p1 = 0000.01
+        p2 = 0000.02
 """
     def prompt_for_settings(self):
         print("Specify the name of the tap device")
@@ -241,7 +245,8 @@ class TIGODriver(weewx.drivers.AbstractDevice):
                 devstr += ' --port %s' % parts[1]
         cmd = "%s observe %s" % (app, devstr)
         loginf("cmd='%s'" % cmd)
-        self.channel_map = stn_dict.get('channel_map', {})
+        self._channel_map = stn_dict.get('channel_map', {})
+        self._known_identifiers = []
         self._mgr = ProcManager()
         self._mgr.startup(cmd, path, ld_library_path)
 
@@ -277,21 +282,34 @@ class TIGODriver(weewx.drivers.AbstractDevice):
 
     def map_packet(self, obj):
         # map an identified object to a channel
-        identifier = '%s.%s' % (obj['gateway']['id'], obj['node']['id'])
-        channel = self.channel_map.get(identifier, 'ch1')
         pkt = dict()
+        identifier = '%s.%s' % (obj['gateway']['id'], obj['node']['id'])
+        label = self.get_panel_label(identifier)
+        if label is None:
+            if identifier not in self._known_identifiers:
+                loginf("no label found for identifier '%s'" % identifier)
+                self._known_identifiers.append(identifier)
+            return pkt
         pkt['dateTime'] = to_datetime(obj['timestamp'])
         pkt['usUnits'] = weewx.METRIC
         pkt['identifier'] = identifier
         for field in OBS_FIELDS:
             if field in obj:
-                label = '%s_%s' % (channel, field)
-                pkt[label] = float(obj[field])
+                pkt['%s_%s' % (label, field)] = float(obj[field])
         return pkt
+
+    def get_panel_label(self, identifier):
+        # given an identifier of the form gateway_id.node_id, return the
+        # associated panel label.
+        for label in self._channel_map:
+            if label == identifier:
+                return self._channel_map[label]
+        return None
 
 
 def main():
     import optparse
+    from weecfg import read_config
     from weeutil.weeutil import to_sorted_string
 
     usage = """%prog [--debug] [--help] [--version]
@@ -311,6 +329,8 @@ def main():
                       help='value for LD_LIBRARY_PATH')
     parser.add_option('--tap', default='/dev/ttyUSB0',
                       help='name of the tap device or host[:port]')
+    parser.add_option('--config',
+                      help='configuration file with channel map')
     parser.add_option('--action', default='show-data',
                       help='what to do: show-data, list-identifiers')
 
@@ -326,10 +346,17 @@ def main():
         print("unknown action '%s'" % options.action)
         exit(1)
 
+    panel_map = dict()
+    if options.config:
+        config_dict = read_config(options.config)
+        if 'TIGO' in config_dict and 'panel_map' in config_dict['TIGO']:
+            panel_map = config_dict['TIGO']['panel_map']
+
     config_dict = {
         'TIGO': {
             'tap': options.tap,
             'app': options.app,
+            'panel_map': panel_map,
         }
     }
     if options.path:

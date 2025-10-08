@@ -2,7 +2,31 @@
 # Copyright 2025 Matthew Wall
 # Distributed under the terms of the GNU Public License (GPLv3)
 
+from io import StringIO
+import configobj
 from weecfg.extension import ExtensionInstaller
+
+TIGO_DEFAULTS = u"""
+[TIGO]
+    driver = user.tigo
+
+    # The RS485 tap is either a serial device or hostname:port
+    tap = /dev/ttyUSB0
+
+[DataBindings]
+    [[tigo_binding]]
+        database = tigo_sqlite
+        table_name = archive
+        manager = weewx.manager.DaySummaryManager
+        schema = user.tigo.schema
+
+[Databases]
+    [[tigo_sqlite]]
+        database_name = tigo.sdb
+        database_type = SQLite
+"""
+
+defaults_dict = configobj.ConfigObj(StringIO(TIGO_DEFAULTS), encoding='utf-8')
 
 def loader():
     return TIGOInstaller()
@@ -12,8 +36,13 @@ class TIGOInstaller(ExtensionInstaller):
         super(TIGOInstaller, self).__init__(
             version="0.1",
             name='tigo',
-            description='Capture data TIGO solar panel monitor',
+            description='Capture data from TIGO solar panel monitor',
             author="Matthew Wall",
             author_email="mwall@users.sourceforge.net",
+            config=defaults_dict,
             files=[('bin/user', ['bin/user/tigo.py'])]
             )
+
+    def configure(self, engine):
+        engine.config_dict['Station']['station_type'] = 'TIGO'
+        engine.config_dict['StdArchive']['data_binding'] = 'tigo_binding'
