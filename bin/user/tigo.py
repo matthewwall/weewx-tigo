@@ -57,6 +57,14 @@ except ImportError:
     def logerr(msg):
         logmsg(syslog.LOG_ERR, msg)
 
+# FIXME: gotta figure out how to make logging work for direct invocation
+#def logdbg(msg):
+#    print(msg)
+#def loginf(msg):
+#    print(msg)
+#def logerr(msg):
+#    print(msg)
+
 DRIVER_NAME = 'TIGO'
 DRIVER_VERSION = '0.1'
 
@@ -245,7 +253,8 @@ class TIGODriver(weewx.drivers.AbstractDevice):
                 devstr += ' --port %s' % parts[1]
         cmd = "%s observe %s" % (app, devstr)
         loginf("cmd='%s'" % cmd)
-        self._channel_map = stn_dict.get('channel_map', {})
+        self._panel_map = stn_dict.get('panel_map', {})
+        loginf("panel_map=%s" % self._panel_map)
         self._known_identifiers = []
         self._mgr = ProcManager()
         self._mgr.startup(cmd, path, ld_library_path)
@@ -287,9 +296,9 @@ class TIGODriver(weewx.drivers.AbstractDevice):
         label = self.get_panel_label(identifier)
         if label is None:
             if identifier not in self._known_identifiers:
-                loginf("no label found for identifier '%s'" % identifier)
+                loginf("no panel mapping found for identifier '%s'" % identifier)
                 self._known_identifiers.append(identifier)
-            return pkt
+            label = identifier
         pkt['dateTime'] = to_datetime(obj['timestamp'])
         pkt['usUnits'] = weewx.METRIC
         pkt['identifier'] = identifier
@@ -301,15 +310,23 @@ class TIGODriver(weewx.drivers.AbstractDevice):
     def get_panel_label(self, identifier):
         # given an identifier of the form gateway_id.node_id, return the
         # associated panel label.
-        for label in self._channel_map:
-            if label == identifier:
-                return self._channel_map[label]
+        for label in self._panel_map:
+            if self._panel_map[label] == identifier:
+                return label
         return None
 
 
+def get_panel_map(config_filename):
+    from weecfg import read_config
+    panel_map = dict()
+    config_path, config_dict = read_config(config_filename)
+    if 'TIGO' in config_dict and 'panel_map' in config_dict['TIGO']:
+        panel_map = config_dict['TIGO']['panel_map']
+    return panel_map
+
+    
 def main():
     import optparse
-    from weecfg import read_config
     from weeutil.weeutil import to_sorted_string
 
     usage = """%prog [--debug] [--help] [--version]
@@ -348,9 +365,7 @@ def main():
 
     panel_map = dict()
     if options.config:
-        config_dict = read_config(options.config)
-        if 'TIGO' in config_dict and 'panel_map' in config_dict['TIGO']:
-            panel_map = config_dict['TIGO']['panel_map']
+        panel_map = get_panel_map(options.config)
 
     config_dict = {
         'TIGO': {
@@ -373,16 +388,32 @@ def main():
         duration = 30 # how long to listen, in seconds
         print("listening for %s seconds" % duration)
         ts = time.time()
-        known_identifiers = []
+        detected_identifiers = []
         for pkt in driver.genLoopPackets():
             identifier = pkt['identifier']
-            if identifier not in known_identifiers:
-                known_identifiers.append(identifier)
+            if identifier not in detected_identifiers:
+                detected_identifiers.append(identifier)
             if time.time() - ts > duration:
                 break
-        print("found %s unique identifiers" % len(known_identifiers))
-        for identifier in sorted(known_identifiers):
+        print("found %s unique identifiers" % len(detected_identifiers))
+        for identifier in sorted(detected_identifiers):
             print("  %s" % identifier)
+        if options.config:
+            # if a configuration file was specified, get the panel mapping from
+            # it (if one exists) then use that to see whether any of the
+            # identifiers that we have detected is not mapped.
+            known_identifiers = []
+            panel_map = get_panel_map(options.config)
+            for label in panel_map:
+                known_identifiers.append(panel_map[label])
+            unrecognized_identifiers = []
+            for identifier in detected_identifiers:
+                if identifier not in known_identifiers:
+                    unrecognized_identifiers.append(identifier)
+            if unrecognized_identifiers:
+                print("unrecognized:")
+                for identifier in sorted(unrecognized_identifiers):
+                    print("  %s" % identifier)
 
 if __name__ == '__main__':
     main()
