@@ -2,12 +2,22 @@ weewx-tigo
 Copyright 2025 Matthew Wall
 Distributed under terms of the GPLv3
 
-This is a driver for weewx that captures data from TIGO solar panel monitors.
+This weeWX driver captures data from Tigo solar panel optimizers using taptap.
 
-Note that there will be no output from the TIGO when there is no sunlight on
-the panels.  You might be confused when you try to install/configure the driver
-at night, but it is only because the panels only output data when they are
-illuminated.
+The TIGO web site shows the actual CCA device.  A Tigo optimizer such as the
+TS4-A-O is connected to each panel, then each optimizer communicates wirelessly
+with a Tigo access point (TAP), which then transmits data to the CCA via an
+RS485 wired connection.
+
+  https://support.tigoenergy.com/hc/en-us/articles/224215048-Cloud-Connect-Advanced-CCA-LED-status-information
+
+Note that there will be no output when there is no sunlight on the panels.  You
+might be confused when you try to install/configure the driver at night, but it
+is only because the panels only output data when they are illuminated.
+
+The driver supports up to 50 solar panels.  If you have more than 50 panel
+optimizers, modify MAX_PANELS in tigo.py before the database is created
+(which happens the first time you run weewx with the tigo schema).
 
 
 ===============================================================================
@@ -24,7 +34,7 @@ Installation
 
 weectl extension install https://github.com/matthewwall/weewx-tigo/archive/master.zip
 
-2) run the driver directly to verify functionality
+2) run the driver directly to verify functionality and collect identifiers
 
 export WEEWX_BINDIR=/usr/share/weewx
 export WEEWX_USRDIR=/etc/weewx/bin/user
@@ -34,17 +44,13 @@ PYTHONPATH=$WEEWX_BINDIR python3 $WEEWX_USRDIR/tigo.py
 
 weectl station reconfigure --driver=user.tigo
 
-4) start weewx
+4) create the panel_map in weewx.conf (see section 'panel map' below)
+
+nano /etc/weewx/weewx.conf
+
+5) start weewx
 
 sudo systemctl start weewx
-
-
-===============================================================================
-panel support
-
-The driver supports up to 50 solar panels.  If you have more than 50 panels
-connected to the TIGO, modify MAX_PANELS in tigo.py before the database is
-created (which happens the first time you run weewx with the tigo schema).
 
 
 ===============================================================================
@@ -64,14 +70,14 @@ the weewx configuration file.
 
 For example,
 
-$ PYTHONPATH=$WEEWX_BINDIR python3 $WEEWX_USRDIR/tigo.py --action list-identifiers
+  PYTHONPATH=$WEEWX_BINDIR python3 $WEEWX_USRDIR/tigo.py --action list-identifiers
 listening for 30 seconds
 found 3 unique identifiers
   4609.10
   4609.11
   4609.12
 
-This becomes:
+In the weewx configuration file this becomes:
 
 [TIGO]
   driver = user.tigo
@@ -79,6 +85,10 @@ This becomes:
     p1 = 4609.10
     p2 = 4609.11
     p3 = 4609.12
+
+Then verify that the mappings were entered correctly by collecting data:
+
+  PYTHONPATH=$WEEWX_BINDIR python3 $WEEWX_USRDIR/tigo.py --action show-data
 
 
 ===============================================================================
@@ -88,15 +98,11 @@ Taptap is a rust application that listens for and decodes the TIGO protocol
 from a Cloud Connect Advanced (CCA) device.  This requires an RS485 device,
 either serial, serial-to-usb, or serial-to-tcp, that is wired to the 'gateway'
 ground, A, and B wires of the CCA and acts as a 'tap' - a read-only monitor of
-the RS485 communication between the CCA and the TIGO solar panel monitor(s).
+the RS485 communication between the CCA and the Tigo solar panel optimizer(s).
 
 The taptap README has the wiring details and guidance:
 
   https://github.com/willglynn/taptap
-
-The TIGO web site shows the actual CCA device and status information:
-
-  https://support.tigoenergy.com/hc/en-us/articles/224215048-Cloud-Connect-Advanced-CCA-LED-status-information
 
 To build taptap, you need a rust development environment.  You might be able to
 use the rust package for your operating system, but it might be safer to use

@@ -2,7 +2,7 @@
 # Copyright 2025 Matthew Wall
 # Distributed under the terms of the GNU Public License (GPLv3)
 """
-Collect data from TIGO solar panel monitor over RS485 using taptap.
+Collect data from Tigo solar panel optimizers over RS485 using taptap.
 """
 
 from __future__ import with_statement
@@ -13,12 +13,7 @@ import subprocess
 import threading
 import time
 
-try:
-    # Python 3
-    import queue
-except ImportError:
-    # Python 2:
-    import Queue as queue
+import queue
 
 try:
     import cjson as json
@@ -33,29 +28,15 @@ except (ImportError, AttributeError):
 import weewx.drivers
 import weewx.units
 
-try:
-    # logging in weewx 4+
-    import weeutil.logger
-    import logging
-    log = logging.getLogger(__name__)
-    def logdbg(msg):
-        log.debug(msg)
-    def loginf(msg):
-        log.info(msg)
-    def logerr(msg):
-        log.error(msg)
-except ImportError:
-    # logging in weewx 3
-    import syslog
-    def logmsg(level, msg):
-        syslog.syslog(level, 'tigo: %s: %s' %
-                      (threading.currentThread().getName(), msg))
-    def logdbg(msg):
-        logmsg(syslog.LOG_DEBUG, msg)
-    def loginf(msg):
-        logmsg(syslog.LOG_INFO, msg)
-    def logerr(msg):
-        logmsg(syslog.LOG_ERR, msg)
+import weeutil.logger
+import logging
+log = logging.getLogger(__name__)
+def logdbg(msg):
+    log.debug(msg)
+def loginf(msg):
+    log.info(msg)
+def logerr(msg):
+    log.error(msg)
 
 # FIXME: gotta figure out how to make logging work for direct invocation
 #def logdbg(msg):
@@ -66,7 +47,7 @@ except ImportError:
 #    print(msg)
 
 DRIVER_NAME = 'TIGO'
-DRIVER_VERSION = '0.1'
+DRIVER_VERSION = '0.2'
 
 def loader(config_dict, _):
     return TIGODriver(**config_dict[DRIVER_NAME])
@@ -348,7 +329,7 @@ def main():
                       help='name of the tap device or host[:port]')
     parser.add_option('--config',
                       help='configuration file with channel map')
-    parser.add_option('--action', default='show-data',
+    parser.add_option('--action', default='list-identifiers',
                       help='what to do: show-data, list-identifiers')
 
     (options, args) = parser.parse_args()
@@ -385,7 +366,7 @@ def main():
         for pkt in driver.genLoopPackets():
             print(to_sorted_string(pkt))
     elif options.action == 'list-identifiers':
-        duration = 30 # how long to listen, in seconds
+        duration = 60 # how long to listen, in seconds
         print("listening for %s seconds" % duration)
         ts = time.time()
         detected_identifiers = []

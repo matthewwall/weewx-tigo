@@ -6,7 +6,7 @@ from io import StringIO
 import configobj
 from weecfg.extension import ExtensionInstaller
 
-TIGO_DEFAULTS = u"""
+CFG_DEFAULTS = u"""
 [TIGO]
     driver = user.tigo
 
@@ -26,7 +26,7 @@ TIGO_DEFAULTS = u"""
         database_type = SQLite
 """
 
-defaults_dict = configobj.ConfigObj(StringIO(TIGO_DEFAULTS), encoding='utf-8')
+defaults_dict = configobj.ConfigObj(StringIO(CFG_DEFAULTS), encoding='utf-8')
 
 def loader():
     return TIGOInstaller()
@@ -34,9 +34,9 @@ def loader():
 class TIGOInstaller(ExtensionInstaller):
     def __init__(self):
         super(TIGOInstaller, self).__init__(
-            version="0.1",
+            version="0.2",
             name='tigo',
-            description='Capture data from TIGO solar panel monitor',
+            description='Capture data from Tigo solar panel optimizers',
             author="Matthew Wall",
             author_email="mwall@users.sourceforge.net",
             config=defaults_dict,
